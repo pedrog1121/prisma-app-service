@@ -5,9 +5,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="Prisma App Service: app para técnicos de campo de Prisma ERP (prototipo con datos de prueba).">
-  <meta name="theme-color" content="#3730A3">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#EEF0F6">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#080B13">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Prisma Service">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
   <link rel="icon" type="image/png" href="favicon.png">
@@ -15,14 +16,15 @@
   <title>Prisma App Service</title>
   <style>
     :root {
-      --bg: #E9EAF3;
-      --fg: #1E1B4B;
-      --muted: #5B5F7A;
-      --frame: #14122B;
-      --accent: #3730A3;
+      --bg: #EEF0F6;
+      --app: #EEF0F6;
+      --fg: #161A29;
+      --muted: #525769;
+      --frame: #161A29;
+      --accent: #4D4BD1;
     }
     @media (prefers-color-scheme: dark) {
-      :root { --bg: #0E0D1C; --fg: #E6E7F5; --muted: #9DA0BE; --frame: #000; --accent: #A5B4FC; }
+      :root { --bg: #05070D; --app: #080B13; --fg: #ECEEF4; --muted: #A8AEBE; --frame: #000; --accent: #808AFF; }
     }
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; }
@@ -64,16 +66,16 @@
       height: 100%;
       border-radius: 36px;
       overflow: hidden;
-      background: #F4F5FA;
+      background: var(--app);
     }
     .loading {
       position: absolute; inset: 0; display: flex; flex-direction: column; gap: 14px;
-      align-items: center; justify-content: center; color: #3730A3; font-size: 14px;
-      background: #F4F5FA; z-index: 1; transition: opacity .3s;
+      align-items: center; justify-content: center; color: var(--accent); font-size: 14px;
+      background: var(--app); z-index: 1; transition: opacity .3s;
     }
     .spinner {
       width: 34px; height: 34px; border-radius: 50%;
-      border: 3px solid rgba(55, 48, 163, .2); border-top-color: #3730A3;
+      border: 3px solid color-mix(in srgb, var(--accent) 20%, transparent); border-top-color: var(--accent);
       animation: spin .9s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -107,6 +109,30 @@
     </div>
   </div>
   </main>
+  <script>
+    // Flutter web no recibe env(safe-area-inset-*): se miden aquí y la app las lee.
+    (function () {
+      function measure() {
+        var d = document.createElement('div');
+        d.style.cssText = 'position:fixed;top:0;left:0;visibility:hidden;pointer-events:none;' +
+          'padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)';
+        document.body.appendChild(d);
+        var cs = getComputedStyle(d);
+        // En el marco de escritorio no hay zonas seguras
+        var framed = window.matchMedia('(min-width: 501px)').matches;
+        window.__prismaInsets = framed ? { top: 0, right: 0, bottom: 0, left: 0 } : {
+          top: parseFloat(cs.paddingTop) || 0,
+          right: parseFloat(cs.paddingRight) || 0,
+          bottom: parseFloat(cs.paddingBottom) || 0,
+          left: parseFloat(cs.paddingLeft) || 0
+        };
+        d.remove();
+      }
+      measure();
+      window.addEventListener('resize', measure);
+      window.addEventListener('orientationchange', function () { setTimeout(measure, 300); });
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

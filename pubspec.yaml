@@ -1,12 +1,13 @@
 name: prisma_app_service
 description: "Prisma App Service — app móvil Flutter para Android e iOS."
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.2.0+2
 
 environment:
   sdk: ^3.5.0
 
 dependencies:
+  cupertino_icons: ^1.0.8
   flutter:
     sdk: flutter
   flutter_localizations:

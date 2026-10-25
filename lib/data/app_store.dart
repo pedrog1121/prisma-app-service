@@ -26,10 +26,7 @@ class AppStore extends ChangeNotifier {
 
   List<WorkOrder> ordersOn(DateTime day) {
     final list = orders
-        .where((o) =>
-            o.scheduled.year == day.year &&
-            o.scheduled.month == day.month &&
-            o.scheduled.day == day.day)
+        .where((o) => o.scheduled.year == day.year && o.scheduled.month == day.month && o.scheduled.day == day.day)
         .toList()
       ..sort((a, b) => a.scheduled.compareTo(b.scheduled));
     return list;

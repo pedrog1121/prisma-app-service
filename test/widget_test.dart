@@ -7,10 +7,15 @@ void main() {
 
   testWidgets('ingresa y muestra la agenda del técnico', (tester) async {
     await tester.pumpWidget(const PrismaApp());
+    await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('Ingresar'), findsOneWidget);
 
     await tester.tap(find.text('Ingresar'));
-    await tester.pumpAndSettle();
-    expect(find.text('Hola, Carlos'), findsOneWidget);
+    // La pantalla de inicio tiene animaciones continuas: se avanza el reloj a mano.
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+    expect(find.text('Próxima visita'.toUpperCase()), findsOneWidget);
+    expect(find.text('Supermercado La Esperanza'), findsWidgets);
   });
 }

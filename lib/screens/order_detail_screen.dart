@@ -1,82 +1,162 @@
+import 'dart:ui';
+
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../data/app_store.dart';
 import '../data/models.dart';
-import '../theme.dart';
-import '../widgets/common.dart';
-import 'order_tabs/close_tab.dart';
-import 'order_tabs/equipment_tab.dart';
-import 'order_tabs/photos_tab.dart';
-import 'order_tabs/summary_tab.dart';
-import 'order_tabs/supplies_tab.dart';
+import '../design/adaptive.dart';
+import '../design/components.dart';
+import '../design/format.dart';
+import '../design/order_styles.dart';
+import '../design/tokens.dart';
+import 'order_sections/close_section.dart';
+import 'order_sections/equipment_section.dart';
+import 'order_sections/photos_section.dart';
+import 'order_sections/summary_section.dart';
+import 'order_sections/supplies_section.dart';
+import 'order_success_screen.dart';
 
-class OrderDetailScreen extends StatelessWidget {
+enum _Section { detalle, equipos, fotos, insumos, cierre }
+
+extension on _Section {
+  String get label => switch (this) {
+        _Section.detalle => 'Detalle',
+        _Section.equipos => 'Equipos',
+        _Section.fotos => 'Fotos',
+        _Section.insumos => 'Insumos',
+        _Section.cierre => 'Cierre',
+      };
+}
+
+class OrderDetailScreen extends StatefulWidget {
   const OrderDetailScreen({super.key, required this.order});
 
   final WorkOrder order;
 
   @override
-  Widget build(BuildContext context) {
-    final o = order;
-    // La carga de equipos para predictivo solo aplica a órdenes de contrato.
-    final showEquipment = o.hasContract && o.equipments.isNotEmpty;
-    final tabs = <(String, IconData, Widget)>[
-      ('Detalle', Icons.info_outline_rounded, SummaryTab(order: o)),
-      if (showEquipment) ('Equipos', Icons.precision_manufacturing_outlined, EquipmentTab(order: o)),
-      ('Fotos', Icons.photo_camera_outlined, PhotosTab(order: o)),
-      ('Insumos', Icons.inventory_2_outlined, SuppliesTab(order: o)),
-      ('Cierre', Icons.draw_outlined, CloseTab(order: o)),
-    ];
+  State<OrderDetailScreen> createState() => _OrderDetailScreenState();
+}
 
-    return DefaultTabController(
-      length: tabs.length,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(o.number),
-          actions: [
-            IconButton(
-              tooltip: 'Llamar al cliente',
-              icon: const Icon(Icons.call_rounded),
-              onPressed: () => launchUrl(Uri(scheme: 'tel', path: o.client.phone.replaceAll(' ', ''))),
-            ),
-            IconButton(
-              tooltip: 'Cómo llegar',
-              icon: const Icon(Icons.directions_rounded),
-              onPressed: () => launchUrl(
-                Uri.https('www.google.com', '/maps/dir/', {
-                  'api': '1',
-                  'destination': '${o.client.lat},${o.client.lng}',
-                }),
-                mode: LaunchMode.externalApplication,
-              ),
-            ),
-            const SizedBox(width: 4),
-          ],
+class _OrderDetailScreenState extends State<OrderDetailScreen> {
+  _Section _section = _Section.detalle;
+  final _scroll = ScrollController();
+
+  WorkOrder get o => widget.order;
+
+  /// La carga de equipos para predictivo solo aplica a órdenes de contrato.
+  List<_Section> get _sections => [
+        _Section.detalle,
+        if (o.hasContract && o.equipments.isNotEmpty) _Section.equipos,
+        _Section.fotos,
+        _Section.insumos,
+        _Section.cierre,
+      ];
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _goTo(_Section s) {
+    setState(() => _section = s);
+    // Lleva el contenido al inicio de la sección sin perder el encabezado
+    if (_scroll.hasClients && _scroll.offset > 320) {
+      _scroll.animateTo(320, duration: Motion.medium, curve: Motion.enter);
+    }
+  }
+
+  Future<void> _close() async {
+    final ok = await confirmAction(
+      context,
+      title: '¿Cerrar la orden?',
+      message: 'Se enviará ${o.number} al ERP con ${Fmt.durationShort(o.totalElapsed)} de trabajo, '
+          '${o.photos.length} fotos y ${o.supplies.length} insumos. Después no se puede editar.',
+      confirmLabel: 'Cerrar orden',
+    );
+    if (!ok || !mounted) return;
+    AppStore.instance.closeOrder(o);
+    Haptics.success();
+    await Navigator.of(context).push(PageRouteBuilder<void>(
+      transitionDuration: Motion.slow,
+      pageBuilder: (_, __, ___) => OrderSuccessScreen(order: o),
+      transitionsBuilder: (_, anim, __, child) => FadeTransition(opacity: anim, child: child),
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.pc;
+    final sections = _sections;
+    if (!sections.contains(_section)) _section = _Section.detalle;
+
+    return ListenableBuilder(
+      listenable: AppStore.instance,
+      builder: (context, _) => PrismaPage(
+        title: o.number,
+        previousTitle: 'Volver',
+        compact: true,
+        controller: _scroll,
+        trailing: IconButton(
+          tooltip: 'Llamar a ${o.client.contact}',
+          onPressed: () => launchUrl(Uri(scheme: 'tel', path: o.client.phone.replaceAll(' ', ''))),
+          icon: Icon(isCupertino(context) ? CupertinoIcons.phone : Icons.call_outlined, color: c.primary),
         ),
-        body: ListenableBuilder(
-          listenable: AppStore.instance,
-          builder: (context, _) => NestedScrollView(
-            headerSliverBuilder: (context, _) => [
-              SliverToBoxAdapter(child: _Header(order: o)),
-              SliverToBoxAdapter(child: _TimerCard(order: o)),
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: _TabBarDelegate(
-                  TabBar(
-                    isScrollable: true,
-                    tabAlignment: TabAlignment.start,
-                    labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontFamily: 'Inter'),
-                    tabs: [
-                      for (final t in tabs) Tab(icon: Icon(t.$2, size: 20), text: t.$1, height: 58),
-                    ],
+        bottomBar: o.isClosed
+            ? null
+            : _ActionBar(order: o, section: _section, onClose: _close, onGoToClose: () => _goTo(_Section.cierre)),
+        slivers: [
+          Gutter(sliver: SliverToBoxAdapter(child: FadeSlideIn(child: _Header(order: o)))),
+          Gutter(
+            top: Space.lg,
+            sliver: SliverToBoxAdapter(child: FadeSlideIn(index: 1, child: _WorkPanel(order: o))),
+          ),
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: _PinnedTabs(
+              child: PillTabs(
+                labels: [for (final s in sections) s.label],
+                selected: sections.indexOf(_section),
+                onChanged: (i) => _goTo(sections[i]),
+              ),
+              color: c.background,
+            ),
+          ),
+          Gutter(
+            top: Space.sm,
+            sliver: SliverToBoxAdapter(
+              child: AnimatedSwitcher(
+                duration: Motion.medium,
+                switchInCurve: Motion.enter,
+                switchOutCurve: Curves.easeIn,
+                transitionBuilder: (child, anim) => FadeTransition(
+                  opacity: anim,
+                  child: SlideTransition(
+                    position: Tween(begin: const Offset(0, 0.02), end: Offset.zero).animate(anim),
+                    child: child,
                   ),
                 ),
+                layoutBuilder: (current, previous) => Stack(
+                  alignment: Alignment.topCenter,
+                  children: [...previous, if (current != null) current],
+                ),
+                child: KeyedSubtree(
+                  key: ValueKey(_section),
+                  child: switch (_section) {
+                    _Section.detalle => SummarySection(order: o),
+                    _Section.equipos => EquipmentSection(order: o),
+                    _Section.fotos => PhotosSection(order: o),
+                    _Section.insumos => SuppliesSection(order: o),
+                    _Section.cierre => CloseSection(order: o),
+                  },
+                ),
               ),
-            ],
-            body: TabBarView(children: [for (final t in tabs) t.$3]),
+            ),
           ),
-        ),
+          SliverToBoxAdapter(child: SizedBox(height: MediaQuery.paddingOf(context).bottom + 120)),
+        ],
       ),
     );
   }
@@ -89,161 +169,379 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.pc;
     final o = order;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
+    final pTone = o.priority.tone(c);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            StateChip(label: o.status.label, tone: o.status.tone(c)),
+            Tag(label: o.type.label, marker: o.type.accent(c)),
+            if (pTone != null) StateChip(label: o.priority.label, tone: pTone, icon: Icons.priority_high_rounded),
+            if (o.contract != null) Tag(label: o.contract!.code, icon: Icons.verified_outlined),
+          ],
+        ),
+        const SizedBox(height: Space.md),
+        Text(o.client.name, style: context.tt.headlineSmall?.copyWith(fontSize: 22)),
+        const SizedBox(height: 4),
+        Text(o.title, style: context.tt.bodyMedium?.copyWith(color: c.muted)),
+        const SizedBox(height: Space.md),
+        Row(
+          children: [
+            _QuickAction(
+              icon: Icons.near_me_outlined,
+              label: 'Cómo llegar',
+              onTap: () => launchUrl(
+                Uri.https('www.google.com', '/maps/dir/', {
+                  'api': '1',
+                  'destination': '${o.client.lat},${o.client.lng}',
+                }),
+                mode: LaunchMode.externalApplication,
+              ),
+            ),
+            const SizedBox(width: Space.sm),
+            _QuickAction(
+              icon: Icons.call_outlined,
+              label: 'Llamar',
+              onTap: () => launchUrl(Uri(scheme: 'tel', path: o.client.phone.replaceAll(' ', ''))),
+            ),
+            const SizedBox(width: Space.sm),
+            _QuickAction(
+              icon: Icons.sms_outlined,
+              label: 'Mensaje',
+              onTap: () => launchUrl(Uri(scheme: 'sms', path: o.client.phone.replaceAll(' ', ''))),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _QuickAction extends StatelessWidget {
+  const _QuickAction({required this.icon, required this.label, required this.onTap});
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.pc;
+    return Expanded(
+      child: Pressable(
+        onTap: onTap,
+        child: Container(
+          height: 40,
+          decoration: BoxDecoration(
+            color: c.surface,
+            borderRadius: BorderRadius.circular(Radii.md),
+            border: Border.all(color: c.border.withValues(alpha: 0.8)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              StatusPill(o.status),
-              Pill(label: o.type.label, color: AppColors.text, icon: o.type.icon),
-              Pill(label: 'Prioridad ${o.priority.label.toLowerCase()}', color: o.priority.color),
-              if (o.contract != null) ContractPill(o.contract!),
+              Icon(icon, size: 17, color: c.onSelection),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.tt.labelMedium?.copyWith(color: c.foreground, fontSize: 13)),
+              ),
             ],
           ),
-          const SizedBox(height: 10),
-          Text(o.client.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 2),
-          Text(o.title, style: const TextStyle(color: AppColors.muted, fontSize: 14.5)),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _TimerCard extends StatelessWidget {
-  const _TimerCard({required this.order});
+/// Panel del cronómetro: anillo de avance contra el tiempo estimado.
+class _WorkPanel extends StatelessWidget {
+  const _WorkPanel({required this.order});
 
   final WorkOrder order;
 
   @override
   Widget build(BuildContext context) {
+    final c = context.pc;
     final o = order;
-    final store = AppStore.instance;
-    final over = o.totalElapsed > o.estimated;
-    final onDark = o.isRunning;
+    return LiveRebuild(
+      active: o.isRunning,
+      builder: (context) {
+        final elapsed = o.totalElapsed;
+        final ratio = elapsed.inSeconds / o.estimated.inSeconds;
+        final over = ratio > 1;
+        final ringColor = o.isClosed
+            ? c.success
+            : over
+                ? c.danger
+                : o.isRunning
+                    ? c.warning
+                    : c.input;
+        final label = o.isClosed
+            ? 'Tiempo total'
+            : o.isRunning
+                ? 'Trabajando'
+                : o.status == OrderStatus.pausada
+                    ? 'En pausa'
+                    : 'Sin iniciar';
 
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: onDark ? const Color(0xFF1E1B4B) : AppColors.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: onDark ? Colors.transparent : AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
+        return PrismaCard(
+          padding: const EdgeInsets.all(Space.lg),
+          child: Column(
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      o.isClosed
-                          ? 'Tiempo total trabajado'
-                          : o.isRunning
-                              ? 'Trabajo en curso'
-                              : 'Cronómetro de trabajo',
-                      style: TextStyle(
-                          fontSize: 12.5, color: onDark ? Colors.white70 : AppColors.muted),
-                    ),
-                    const SizedBox(height: 2),
-                    Ticker(
-                      active: o.isRunning,
-                      builder: (_) => Text(
-                        Fmt.duration(o.totalElapsed),
-                        style: TextStyle(
-                          fontSize: 30,
-                          fontWeight: FontWeight.w700,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                          color: onDark
-                              ? Colors.white
-                              : (over && o.isClosed ? AppColors.warning : AppColors.text),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: o.isClosed
-                    ? const Pill(
-                        label: 'Cerrada',
-                        color: AppColors.success,
-                        icon: Icons.check_rounded,
-                        filled: true)
-                    : Text('Estimado ${Fmt.durationShort(o.estimated)}',
-                        style: TextStyle(
-                            fontSize: 12.5, color: onDark ? Colors.white60 : AppColors.muted)),
-              ),
-            ],
-          ),
-          if (!o.isClosed) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                if (o.status == OrderStatus.pendiente) ...[
+              Row(
+                children: [
+                  ProgressRing(
+                    value: ratio,
+                    color: ringColor,
+                    track: c.sunken,
+                    size: 60,
+                    stroke: 6,
+                    child: o.isRunning
+                        ? PulseDot(color: c.warning, size: 9)
+                        : Icon(
+                            o.isClosed
+                                ? Icons.check_rounded
+                                : o.status == OrderStatus.pausada
+                                    ? Icons.pause_rounded
+                                    : Icons.timer_outlined,
+                            color: ringColor == c.input ? c.muted : ringColor,
+                          ),
+                  ),
+                  const SizedBox(width: Space.lg),
                   Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        store.setOnTheWay(o);
-                        showToast(context, 'Se avisó al cliente que vas en camino',
-                            icon: Icons.near_me_rounded);
-                      },
-                      icon: const Icon(Icons.near_me_rounded, size: 18),
-                      label: const Text('En camino'),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(label.toUpperCase(), style: context.tt.labelSmall),
+                        const SizedBox(height: 2),
+                        Text(
+                          Fmt.duration(elapsed),
+                          style: context.tt.displaySmall?.copyWith(
+                            fontSize: 28,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                        Text(
+                          over
+                              ? 'Excede lo estimado (${Fmt.durationShort(o.estimated)})'
+                              : 'Estimado ${Fmt.durationShort(o.estimated)} · ${(ratio * 100).clamp(0, 100).round()} %',
+                          style: context.tt.bodySmall?.copyWith(color: over ? c.dangerText : c.muted),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 8),
                 ],
-                Expanded(
-                  child: o.isRunning
-                      ? FilledButton.icon(
-                          style: FilledButton.styleFrom(backgroundColor: AppColors.warning),
-                          onPressed: () => store.pauseTimer(o),
-                          icon: const Icon(Icons.pause_rounded),
-                          label: const Text('Pausar'),
-                        )
-                      : FilledButton.icon(
-                          style: FilledButton.styleFrom(backgroundColor: AppColors.success),
-                          onPressed: () => store.startTimer(o),
-                          icon: const Icon(Icons.play_arrow_rounded),
-                          label: Text(o.elapsed == Duration.zero ? 'Iniciar trabajo' : 'Reanudar'),
-                        ),
+              ),
+              const SizedBox(height: Space.lg),
+              Divider(height: 1, color: c.border.withValues(alpha: 0.7)),
+              const SizedBox(height: Space.md),
+              _Steps(order: o),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Pasos del trabajo, como el indicador de proceso del ERP.
+class _Steps extends StatelessWidget {
+  const _Steps({required this.order});
+
+  final WorkOrder order;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.pc;
+    final o = order;
+    final registered = (o.equipments.isEmpty || !o.hasContract || o.equipmentsReviewed == o.equipments.length) &&
+        (o.checklist.isEmpty || o.checklistDone == o.checklist.length);
+    final steps = [
+      ('Llegada', o.status != OrderStatus.pendiente),
+      ('Trabajo', o.totalElapsed > Duration.zero),
+      ('Registro', registered && o.totalElapsed > Duration.zero),
+      ('Firma', o.signature.isNotEmpty || (o.isClosed && o.signerName.isNotEmpty)),
+      ('Cierre', o.isClosed),
+    ];
+    final current = steps.indexWhere((s) => !s.$2);
+
+    return Row(
+      children: [
+        for (var i = 0; i < steps.length; i++) ...[
+          Expanded(
+            child: Column(
+              children: [
+                AnimatedContainer(
+                  duration: Motion.medium,
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: steps[i].$2
+                        ? c.successSoft
+                        : i == current
+                            ? c.primary
+                            : c.surface,
+                    border: Border.all(
+                      color: steps[i].$2 || i == current ? Colors.transparent : c.border,
+                      width: 1.5,
+                    ),
+                  ),
+                  alignment: Alignment.center,
+                  child: steps[i].$2
+                      ? Icon(Icons.check_rounded, size: 14, color: c.successText)
+                      : Text('${i + 1}',
+                          style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: i == current ? c.onPrimary : c.faint)),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  steps[i].$1,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: i == current ? FontWeight.w600 : FontWeight.w500,
+                    color: i == current ? c.foreground : (steps[i].$2 ? c.muted : c.faint),
+                  ),
                 ),
               ],
             ),
-          ],
+          ),
+          if (i < steps.length - 1)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 20),
+              child: AnimatedContainer(
+                duration: Motion.medium,
+                width: 14,
+                height: 2,
+                color: steps[i].$2 ? c.successText : c.border,
+              ),
+            ),
         ],
+      ],
+    );
+  }
+}
+
+/// Acción principal según el estado de la orden y la sección abierta.
+class _ActionBar extends StatelessWidget {
+  const _ActionBar({required this.order, required this.section, required this.onClose, required this.onGoToClose});
+
+  final WorkOrder order;
+  final _Section section;
+  final VoidCallback onClose;
+  final VoidCallback onGoToClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final o = order;
+    final store = AppStore.instance;
+
+    Widget secondary(String label, IconData icon, VoidCallback onTap) => Expanded(
+          flex: 2,
+          child: OutlinedButton(
+            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12)),
+            onPressed: onTap,
+            child: Text(label, maxLines: 1),
+          ),
+        );
+    Widget primary(String label, IconData icon, VoidCallback? onTap, {Color? color, Color? fg}) => Expanded(
+          flex: 3,
+          child: FilledButton.icon(
+            style: color == null ? null : FilledButton.styleFrom(backgroundColor: color, foregroundColor: fg),
+            onPressed: onTap,
+            icon: Icon(icon, size: 20),
+            label: Text(label),
+          ),
+        );
+
+    final List<Widget> buttons;
+    if (section == _Section.cierre && o.totalElapsed > Duration.zero) {
+      final ready = closeRequirements(o).every((r) => r.$2);
+      buttons = [
+        if (o.isRunning) secondary('Pausar', Icons.pause_rounded, () => store.pauseTimer(o)),
+        if (o.isRunning) const SizedBox(width: Space.sm),
+        primary(ready ? 'Cerrar orden' : 'Faltan pasos', Icons.task_alt_rounded, ready ? onClose : null),
+      ];
+    } else if (o.status == OrderStatus.pendiente) {
+      buttons = [
+        secondary('En camino', Icons.near_me_outlined, () {
+          store.setOnTheWay(o);
+          Haptics.tap();
+          showToast(context, 'Se avisó a ${o.client.contact} que vas en camino', icon: Icons.near_me_rounded);
+        }),
+        const SizedBox(width: Space.sm),
+        primary('Iniciar trabajo', Icons.play_arrow_rounded, () {
+          Haptics.success();
+          store.startTimer(o);
+        }),
+      ];
+    } else if (o.isRunning) {
+      buttons = [
+        secondary('Pausar', Icons.pause_rounded, () {
+          Haptics.tap();
+          store.pauseTimer(o);
+        }),
+        const SizedBox(width: Space.sm),
+        primary('Finalizar', Icons.flag_rounded, onGoToClose),
+      ];
+    } else {
+      buttons = [
+        if (o.totalElapsed > Duration.zero) ...[
+          secondary('Finalizar', Icons.flag_outlined, onGoToClose),
+          const SizedBox(width: Space.sm),
+        ],
+        primary(o.totalElapsed > Duration.zero ? 'Reanudar' : 'Iniciar trabajo', Icons.play_arrow_rounded, () {
+          Haptics.success();
+          store.startTimer(o);
+        }),
+      ];
+    }
+
+    return BottomActionBar(
+      child: AnimatedSwitcher(
+        duration: Motion.medium,
+        child: Row(key: ValueKey('${o.status}-$section'), children: buttons),
       ),
     );
   }
 }
 
-class _TabBarDelegate extends SliverPersistentHeaderDelegate {
-  _TabBarDelegate(this.tabBar);
+class _PinnedTabs extends SliverPersistentHeaderDelegate {
+  _PinnedTabs({required this.child, required this.color});
 
-  final TabBar tabBar;
-
-  @override
-  double get minExtent => tabBar.preferredSize.height;
+  final Widget child;
+  final Color color;
 
   @override
-  double get maxExtent => tabBar.preferredSize.height;
+  double get minExtent => 60;
+
+  @override
+  double get maxExtent => 60;
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    return Container(color: AppColors.background, child: tabBar);
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          color: color.withValues(alpha: overlapsContent ? 0.86 : 1),
+          padding: const EdgeInsets.fromLTRB(Space.gutter, 10, Space.gutter, 10),
+          child: child,
+        ),
+      ),
+    );
   }
 
   @override
-  bool shouldRebuild(_TabBarDelegate old) => old.tabBar != tabBar;
+  bool shouldRebuild(_PinnedTabs old) => true;
 }

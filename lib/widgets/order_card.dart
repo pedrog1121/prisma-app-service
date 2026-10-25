@@ -1,90 +1,78 @@
 import 'package:flutter/material.dart';
 
 import '../data/models.dart';
+import '../design/adaptive.dart';
+import '../design/components.dart';
+import '../design/format.dart';
+import '../design/order_styles.dart';
+import '../design/tokens.dart';
 import '../screens/order_detail_screen.dart';
-import '../theme.dart';
-import 'common.dart';
 
+/// Tarjeta de una orden. La jerarquía: hora y estado → cliente → tarea → metadatos.
 class OrderCard extends StatelessWidget {
-  const OrderCard({super.key, required this.order, this.showDate = false});
+  const OrderCard({super.key, required this.order, this.showDay = false});
 
   final WorkOrder order;
-  final bool showDate;
+  final bool showDay;
 
   @override
   Widget build(BuildContext context) {
+    final c = context.pc;
     final o = order;
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => Navigator.of(context)
-            .push(MaterialPageRoute(builder: (_) => OrderDetailScreen(order: o))),
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    final pTone = o.priority.tone(c);
+
+    return PrismaCard(
+      accent: o.type.accent(c),
+      padding: const EdgeInsets.fromLTRB(Space.lg + 4, 14, Space.lg, 14),
+      onTap: () {
+        Haptics.tap();
+        pushPage(context, (_) => OrderDetailScreen(order: o));
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Container(width: 4, color: o.priority.color),
+              Text(
+                showDay ? '${Fmt.relativeDay(o.scheduled)} · ${Fmt.time(o.scheduled)}' : Fmt.time(o.scheduled),
+                style: context.tt.titleSmall?.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
+              ),
+              const SizedBox(width: 6),
+              Text('· ${Fmt.durationShort(o.estimated)}', style: context.tt.bodySmall),
+              const Spacer(),
+              StateChip(label: o.status.label, tone: o.status.tone(c)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(o.client.name, style: context.tt.titleMedium),
+          const SizedBox(height: 2),
+          Text(o.title,
+              maxLines: 2, overflow: TextOverflow.ellipsis, style: context.tt.bodyMedium?.copyWith(color: c.muted)),
+          const SizedBox(height: Space.md),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Tag(label: o.type.label, marker: o.type.accent(c)),
+              if (o.contract != null) Tag(label: o.contract!.code, icon: Icons.verified_outlined),
+              if (pTone != null) StateChip(label: o.priority.label, tone: pTone, icon: Icons.priority_high_rounded),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Icon(Icons.place_outlined, size: 15, color: c.faint),
+              const SizedBox(width: 4),
               Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.schedule_rounded, size: 15, color: AppColors.muted),
-                          const SizedBox(width: 4),
-                          Text(
-                            showDate
-                                ? '${Fmt.dayShort(o.scheduled)} ${Fmt.date(o.scheduled).substring(0, 5)} · ${Fmt.time(o.scheduled)}'
-                                : Fmt.time(o.scheduled),
-                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                          ),
-                          Text('  ·  ${Fmt.durationShort(o.estimated)}',
-                              style: const TextStyle(color: AppColors.muted, fontSize: 12.5)),
-                          const Spacer(),
-                          StatusPill(o.status),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(o.client.name,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 2),
-                      Text(o.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: AppColors.muted, fontSize: 13.5)),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Pill(label: o.type.label, color: AppColors.text, icon: o.type.icon),
-                          if (o.contract != null) ContractPill(o.contract!),
-                          if (o.priority.index >= Priority.alta.index)
-                            Pill(
-                                label: o.priority.label,
-                                color: o.priority.color,
-                                icon: Icons.priority_high_rounded),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.place_outlined, size: 14, color: AppColors.muted),
-                              const SizedBox(width: 2),
-                              Text(o.client.address,
-                                  style: const TextStyle(color: AppColors.muted, fontSize: 12)),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+                child: Text('${o.client.address}, ${o.client.city}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.tt.bodySmall?.copyWith(color: c.faint)),
               ),
             ],
           ),
-        ),
+        ],
       ),
     );
   }

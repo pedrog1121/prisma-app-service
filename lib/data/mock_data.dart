@@ -120,8 +120,8 @@ class MockData {
     Supply(code: 'INS-063', name: 'Filtro de aire 24x24"', unit: 'un', stock: 30, price: 38000),
   ];
 
-  static MeasureDef _temp(List<double> h) => MeasureDef(
-      key: 'temp', label: 'Temperatura de descarga', unit: '°C', min: 60, max: 95, history: h);
+  static MeasureDef _temp(List<double> h) =>
+      MeasureDef(key: 'temp', label: 'Temperatura de descarga', unit: '°C', min: 60, max: 95, history: h);
   static MeasureDef _vib(List<double> h) =>
       MeasureDef(key: 'vib', label: 'Vibración', unit: 'mm/s', min: 0, max: 4.5, history: h);
   static MeasureDef _amp(List<double> h, double max) =>
@@ -144,8 +144,12 @@ class MockData {
   static List<WorkOrder> buildOrders() {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    DateTime at(int dayOffset, int h, [int m = 0]) =>
-        today.add(Duration(days: dayOffset, hours: h, minutes: m));
+    // Las visitas de hoy arrancan una hora antes de ahora (entre las 7 y las 16),
+    // para que la demo siempre muestre una próxima visita cercana.
+    final firstToday = (now.hour - 1).clamp(7, 16);
+    DateTime at(int dayOffset, int h, [int m = 0]) => dayOffset == 0
+        ? today.add(Duration(hours: firstToday + h - 8, minutes: m))
+        : today.add(Duration(days: dayOffset, hours: h, minutes: m));
 
     return [
       WorkOrder(
@@ -157,8 +161,7 @@ class MockData {
         scheduled: at(0, 8),
         estimated: const Duration(hours: 2),
         title: 'Preventivo mensual de cámaras frigoríficas',
-        description:
-            'Visita mensual del contrato. Revisar cámaras de lácteos y carnes, '
+        description: 'Visita mensual del contrato. Revisar cámaras de lácteos y carnes, '
             'tomar lecturas de los compresores y registrar fotos antes y después de la limpieza.',
         equipments: [
           Equipment(
@@ -202,10 +205,7 @@ class MockData {
         ],
         checklist: _preventiveChecklist(),
         photos: [
-          OrderPhoto(
-              stage: PhotoStage.antes,
-              caption: 'Serpentín condensador',
-              color: const Color(0xFF94A3B8)),
+          OrderPhoto(stage: PhotoStage.antes, caption: 'Serpentín condensador', color: const Color(0xFF94A3B8)),
         ],
       ),
       WorkOrder(
@@ -217,8 +217,7 @@ class MockData {
         scheduled: at(0, 10, 30),
         estimated: const Duration(hours: 1, minutes: 30),
         title: 'Equipo de quirófano 2 no enfría',
-        description:
-            'Reclamo del cliente: el split del quirófano 2 enciende pero no baja de 26 °C. '
+        description: 'Reclamo del cliente: el split del quirófano 2 enciende pero no baja de 26 °C. '
             'Prioridad por SLA del contrato (2 h).',
         equipments: [
           Equipment(
@@ -243,8 +242,7 @@ class MockData {
         scheduled: at(0, 13, 30),
         estimated: const Duration(hours: 1),
         title: 'Heladera exhibidora con ruido fuerte',
-        description:
-            'Cliente sin contrato. La exhibidora de postres hace ruido fuerte al arrancar. '
+        description: 'Cliente sin contrato. La exhibidora de postres hace ruido fuerte al arrancar. '
             'Presupuestar si hace falta cambiar el ventilador.',
       ),
       WorkOrder(
@@ -256,8 +254,7 @@ class MockData {
         scheduled: at(0, 15, 30),
         estimated: const Duration(hours: 2, minutes: 30),
         title: 'Ronda predictiva de compresores de túnel',
-        description:
-            'Tomar lecturas de vibración, temperatura y consumo de los compresores del túnel de congelado. '
+        description: 'Tomar lecturas de vibración, temperatura y consumo de los compresores del túnel de congelado. '
             'Informar si alguna variable supera el límite.',
         equipments: [
           Equipment(

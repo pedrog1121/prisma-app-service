@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../data/app_store.dart';
 import '../data/models.dart';
-import '../theme.dart';
-import '../widgets/common.dart';
+import '../design/adaptive.dart';
+import '../design/components.dart';
+import '../design/format.dart';
+import '../design/tokens.dart';
 import '../widgets/order_card.dart';
+import 'order_detail_screen.dart';
 
 class AgendaScreen extends StatefulWidget {
   const AgendaScreen({super.key});
@@ -23,189 +27,296 @@ class _AgendaScreenState extends State<AgendaScreen> {
     _day = DateTime(n.year, n.month, n.day);
   }
 
+  bool get _isToday {
+    final n = DateTime.now();
+    return _day.year == n.year && _day.month == n.month && _day.day == n.day;
+  }
+
   @override
   Widget build(BuildContext context) {
     final store = AppStore.instance;
+    final c = context.pc;
+
     return ListenableBuilder(
       listenable: store,
       builder: (context, _) {
-        final today = DateTime.now();
-        final todayOrders = store.ordersOn(today);
+        final today = store.ordersOn(DateTime.now());
         final dayOrders = store.ordersOn(_day);
-        final isToday = _day.day == today.day && _day.month == today.month;
+        final next = today.where((o) => !o.isClosed).firstOrNull;
 
-        return SafeArea(
-          child: CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(child: _Header(store: store, todayOrders: todayOrders)),
-              SliverToBoxAdapter(
-                child: _WeekStrip(
-                  selected: _day,
-                  countFor: (d) => store.ordersOn(d).length,
-                  onSelect: (d) => setState(() => _day = d),
-                ),
+        return PrismaPage(
+          title: 'Hoy',
+          trailing: _Avatar(initials: store.technician.initials),
+          slivers: [
+            Gutter(
+              sliver: SliverToBoxAdapter(
+                child: Text(Fmt.dayLong(DateTime.now()), style: context.tt.bodyLarge?.copyWith(color: c.muted)),
               ),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
+            ),
+            Gutter(
+              top: Space.lg,
+              sliver: SliverToBoxAdapter(child: FadeSlideIn(child: _DaySummary(orders: today))),
+            ),
+            if (next != null)
+              Gutter(
                 sliver: SliverToBoxAdapter(
-                  child: SectionTitle(
-                    isToday ? 'Hoy, ${Fmt.dayLong(_day).toLowerCase()}' : Fmt.dayLong(_day),
-                    trailing: Text('${dayOrders.length} órdenes',
-                        style: const TextStyle(color: AppColors.muted, fontSize: 13)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SectionLabel('Próxima visita'),
+                      FadeSlideIn(index: 1, child: _NextVisit(order: next)),
+                    ],
                   ),
                 ),
               ),
-              if (dayOrders.isEmpty)
-                const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: EmptyState(
-                    icon: Icons.event_available_rounded,
-                    title: 'Sin órdenes asignadas',
-                    message: 'No tienes visitas programadas para este día.',
-                  ),
-                )
-              else
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                  sliver: SliverList.separated(
-                    itemCount: dayOrders.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (_, i) => OrderCard(order: dayOrders[i]),
-                  ),
+            const Gutter(
+              sliver: SliverToBoxAdapter(child: SectionLabel('Semana')),
+            ),
+            SliverToBoxAdapter(
+              child: _WeekStrip(
+                selected: _day,
+                countFor: (d) => store.ordersOn(d).length,
+                onSelect: (d) => setState(() => _day = d),
+              ),
+            ),
+            Gutter(
+              sliver: SliverToBoxAdapter(
+                child: SectionLabel(
+                  _isToday ? 'Visitas de hoy' : Fmt.dayLong(_day),
+                  trailing: Text('${dayOrders.length}', style: context.tt.labelMedium),
                 ),
-            ],
-          ),
+              ),
+            ),
+            if (dayOrders.isEmpty)
+              const SliverToBoxAdapter(
+                child: EmptyState(
+                  icon: Icons.event_available_rounded,
+                  title: 'Sin visitas asignadas',
+                  message: 'No tienes órdenes programadas para este día.',
+                ),
+              )
+            else
+              Gutter(
+                sliver: SliverList.list(
+                  key: ValueKey(_day),
+                  children: [
+                    for (var i = 0; i < dayOrders.length; i++)
+                      _TimelineItem(
+                        order: dayOrders[i],
+                        isFirst: i == 0,
+                        isLast: i == dayOrders.length - 1,
+                        child: FadeSlideIn(index: i, child: OrderCard(order: dayOrders[i])),
+                      ),
+                  ],
+                ),
+              ),
+            SliverToBoxAdapter(child: SizedBox(height: MediaQuery.paddingOf(context).bottom + Space.xxl)),
+          ],
         );
       },
     );
   }
 }
 
-class _Header extends StatelessWidget {
-  const _Header({required this.store, required this.todayOrders});
+class _Avatar extends StatelessWidget {
+  const _Avatar({required this.initials});
 
-  final AppStore store;
-  final List<WorkOrder> todayOrders;
+  final String initials;
 
   @override
   Widget build(BuildContext context) {
-    final pending = todayOrders.where((o) =>
-        o.status == OrderStatus.pendiente || o.status == OrderStatus.enCamino).length;
-    final active = todayOrders.where((o) =>
-        o.status == OrderStatus.enProceso || o.status == OrderStatus.pausada).length;
-    final done = todayOrders.where((o) => o.isClosed).length;
-    final next = todayOrders.where((o) => !o.isClosed).firstOrNull;
-
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF312E81), AppColors.primary, Color(0xFF4F46E5)],
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      width: 34,
+      height: 34,
+      decoration: const BoxDecoration(shape: BoxShape.circle, gradient: PrismaColors.brandGradient),
+      alignment: Alignment.center,
+      child: Text(initials,
+          style: const TextStyle(fontFamily: 'Inter', color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700)),
+    );
+  }
+}
+
+/// Resumen del día: progreso de visitas, horas planificadas y estado en línea.
+class _DaySummary extends StatelessWidget {
+  const _DaySummary({required this.orders});
+
+  final List<WorkOrder> orders;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.pc;
+    final done = orders.where((o) => o.isClosed).length;
+    final active = orders.where((o) => o.status == OrderStatus.enProceso || o.status == OrderStatus.pausada).length;
+    final pending = orders.length - done - active;
+    final planned = orders.fold(Duration.zero, (a, o) => a + o.estimated);
+
+    return PrismaCard(
+      padding: const EdgeInsets.all(Space.lg),
+      child: Row(
         children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 22,
-                backgroundColor: Colors.white.withValues(alpha: 0.18),
-                child: Text(store.technician.initials,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Hola, ${store.technician.name.split(' ').first}',
-                        style: const TextStyle(
-                            color: Colors.white, fontSize: 19, fontWeight: FontWeight.w700)),
-                    Text(Fmt.dayLong(DateTime.now()),
-                        style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 13)),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Row(
+          ProgressRing(
+            value: orders.isEmpty ? 0 : done / orders.length,
+            color: c.success,
+            track: c.sunken,
+            size: 76,
+            stroke: 8,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
                   children: [
-                    Icon(Icons.circle, size: 8, color: Color(0xFF4ADE80)),
-                    SizedBox(width: 6),
-                    Text('En línea', style: TextStyle(color: Colors.white, fontSize: 12)),
+                    AnimatedCount(value: done, style: context.tt.titleLarge),
+                    Text('/${orders.length}', style: context.tt.bodySmall),
                   ],
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              _Stat(value: pending, label: 'Pendientes'),
-              _Stat(value: active, label: 'En curso'),
-              _Stat(value: done, label: 'Finalizadas'),
-            ],
-          ),
-          if (next != null) ...[
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.near_me_rounded, color: Colors.white, size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text.rich(
-                      TextSpan(children: [
-                        const TextSpan(text: 'Próxima visita  '),
-                        TextSpan(
-                            text: '${Fmt.time(next.scheduled)} · ${next.client.name}',
-                            style: const TextStyle(fontWeight: FontWeight.w700)),
-                      ]),
-                      style: const TextStyle(color: Colors.white, fontSize: 13),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
+              ],
             ),
-          ],
+          ),
+          const SizedBox(width: Space.lg),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  done == orders.length && orders.isNotEmpty ? 'Día completo' : 'Visitas completadas',
+                  style: context.tt.titleSmall,
+                ),
+                const SizedBox(height: 2),
+                Text('${Fmt.durationShort(planned)} planificadas', style: context.tt.bodySmall),
+                const SizedBox(height: Space.md),
+                Row(
+                  children: [
+                    _Mini(value: pending, label: 'Pendientes', color: c.muted),
+                    const SizedBox(width: Space.lg),
+                    _Mini(value: active, label: 'En curso', color: c.warningText),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-class _Stat extends StatelessWidget {
-  const _Stat({required this.value, required this.label});
+class _Mini extends StatelessWidget {
+  const _Mini({required this.value, required this.label, required this.color});
 
   final int value;
   final String label;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
+    return Row(
+      children: [
+        AnimatedCount(value: value, style: context.tt.titleSmall?.copyWith(color: color)),
+        const SizedBox(width: 4),
+        Text(label, style: context.tt.bodySmall),
+      ],
+    );
+  }
+}
+
+/// Tarjeta destacada de la próxima visita. Una sola acción principal.
+class _NextVisit extends StatelessWidget {
+  const _NextVisit({required this.order});
+
+  final WorkOrder order;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.pc;
+    final o = order;
+    final running = o.isRunning;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(Radii.xl),
+        border: Border.all(color: c.border.withValues(alpha: 0.7)),
+        boxShadow: c.raisedShadow,
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('$value',
-              style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w700)),
-          Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 12.5)),
+          // Franja superior con el horario
+          Container(
+            padding: const EdgeInsets.fromLTRB(Space.lg, Space.md, Space.lg, Space.md),
+            decoration: BoxDecoration(
+              color: c.sunken,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(Radii.xl)),
+              border: Border(bottom: BorderSide(color: c.border.withValues(alpha: 0.7))),
+            ),
+            child: Row(
+              children: [
+                if (running) PulseDot(color: c.warning) else Icon(Icons.schedule_rounded, size: 18, color: c.muted),
+                const SizedBox(width: Space.sm),
+                Text(
+                  running
+                      ? 'Trabajando ahora'
+                      : DateTime.now().difference(o.scheduled).inMinutes > 30
+                          ? '${Fmt.time(o.scheduled)} · con retraso'
+                          : '${Fmt.time(o.scheduled)} · ${Fmt.fromNow(o.scheduled)}',
+                  style: context.tt.labelLarge?.copyWith(fontSize: 14),
+                ),
+                const Spacer(),
+                Text(o.number,
+                    style: context.tt.bodySmall?.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(Space.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(o.client.name, style: context.tt.titleLarge),
+                const SizedBox(height: 4),
+                Text(o.title, style: context.tt.bodyMedium?.copyWith(color: c.muted)),
+                const SizedBox(height: Space.md),
+                Row(
+                  children: [
+                    Icon(Icons.place_outlined, size: 16, color: c.faint),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text('${o.client.address}, ${o.client.city}',
+                          style: context.tt.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: Space.lg),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => launchUrl(
+                          Uri.https('www.google.com', '/maps/dir/', {
+                            'api': '1',
+                            'destination': '${o.client.lat},${o.client.lng}',
+                          }),
+                          mode: LaunchMode.externalApplication,
+                        ),
+                        icon: const Icon(Icons.near_me_outlined, size: 18),
+                        label: const Text('Cómo llegar'),
+                      ),
+                    ),
+                    const SizedBox(width: Space.sm),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: () => pushPage(context, (_) => OrderDetailScreen(order: o)),
+                        child: Text(running ? 'Continuar' : 'Abrir orden'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -221,60 +332,124 @@ class _WeekStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.pc;
     final n = DateTime.now();
-    final start = DateTime(n.year, n.month, n.day).subtract(const Duration(days: 1));
-    final days = List.generate(7, (i) => start.add(Duration(days: i)));
+    final today = DateTime(n.year, n.month, n.day);
+    final start = today.subtract(const Duration(days: 1));
+    final days = List.generate(8, (i) => start.add(Duration(days: i)));
 
     return SizedBox(
-      height: 84,
+      height: 76,
       child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+        padding: const EdgeInsets.symmetric(horizontal: Space.gutter),
         scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
         itemCount: days.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        separatorBuilder: (_, __) => const SizedBox(width: Space.sm),
         itemBuilder: (_, i) {
           final d = days[i];
-          final sel = d.day == selected.day && d.month == selected.month;
+          final sel = d == selected;
+          final isToday = d == today;
           final count = countFor(d);
-          return InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: () => onSelect(d),
+          return Pressable(
+            onTap: () {
+              Haptics.tap();
+              onSelect(d);
+            },
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
+              duration: Motion.medium,
+              curve: Motion.enter,
               width: 52,
               decoration: BoxDecoration(
-                color: sel ? AppColors.primary : AppColors.surface,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: sel ? AppColors.primary : AppColors.border),
+                color: sel ? c.selection : c.surface,
+                borderRadius: BorderRadius.circular(Radii.md),
+                border: Border.all(
+                  color: sel ? c.onSelection.withValues(alpha: 0.3) : c.border.withValues(alpha: 0.7),
+                ),
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(Fmt.dayShort(d),
-                      style: TextStyle(
-                          fontSize: 12, color: sel ? Colors.white70 : AppColors.muted)),
+                      style:
+                          TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: sel ? c.onSelection : c.faint)),
                   const SizedBox(height: 2),
                   Text('${d.day}',
                       style: TextStyle(
-                          fontSize: 18,
+                          fontSize: 19,
                           fontWeight: FontWeight.w700,
-                          color: sel ? Colors.white : AppColors.text)),
-                  const SizedBox(height: 4),
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: count == 0
-                          ? Colors.transparent
-                          : (sel ? Colors.white : AppColors.primaryLight),
-                    ),
+                          color: sel ? c.onSelection : (isToday ? c.primary : c.foreground))),
+                  const SizedBox(height: 5),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (var k = 0; k < count.clamp(0, 3); k++)
+                        Container(
+                          width: 4,
+                          height: 4,
+                          margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: sel ? c.onSelection : c.input,
+                          ),
+                        ),
+                      if (count == 0) const SizedBox(height: 4),
+                    ],
                   ),
                 ],
               ),
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// Riel de línea de tiempo a la izquierda de cada tarjeta.
+class _TimelineItem extends StatelessWidget {
+  const _TimelineItem({required this.order, required this.isFirst, required this.isLast, required this.child});
+
+  final WorkOrder order;
+  final bool isFirst;
+  final bool isLast;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.pc;
+    final done = order.isClosed;
+    final active = order.status == OrderStatus.enProceso || order.status == OrderStatus.pausada;
+    final dotColor = done ? c.success : (active ? c.warning : c.surface);
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 20,
+            child: Column(
+              children: [
+                Container(width: 2, height: 24, color: isFirst ? Colors.transparent : c.border),
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: dotColor,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: done || active ? dotColor : c.input, width: 2),
+                  ),
+                  child: done ? const Icon(Icons.check, size: 8, color: Colors.white) : null,
+                ),
+                Expanded(child: Container(width: 2, color: isLast ? Colors.transparent : c.border)),
+              ],
+            ),
+          ),
+          const SizedBox(width: Space.sm),
+          Expanded(
+            child: Padding(padding: const EdgeInsets.only(bottom: Space.md), child: child),
+          ),
+        ],
       ),
     );
   }

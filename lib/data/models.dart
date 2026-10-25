@@ -30,14 +30,6 @@ extension OrderStatusX on OrderStatus {
         OrderStatus.pausada => 'Pausada',
         OrderStatus.finalizada => 'Finalizada',
       };
-
-  Color get color => switch (this) {
-        OrderStatus.pendiente => const Color(0xFF64748B),
-        OrderStatus.enCamino => const Color(0xFF0EA5E9),
-        OrderStatus.enProceso => const Color(0xFFF59E0B),
-        OrderStatus.pausada => const Color(0xFFA855F7),
-        OrderStatus.finalizada => const Color(0xFF16A34A),
-      };
 }
 
 enum Priority { baja, media, alta, urgente }
@@ -48,13 +40,6 @@ extension PriorityX on Priority {
         Priority.media => 'Media',
         Priority.alta => 'Alta',
         Priority.urgente => 'Urgente',
-      };
-
-  Color get color => switch (this) {
-        Priority.baja => const Color(0xFF64748B),
-        Priority.media => const Color(0xFF0EA5E9),
-        Priority.alta => const Color(0xFFF97316),
-        Priority.urgente => const Color(0xFFDC2626),
       };
 }
 
@@ -75,8 +60,7 @@ class Technician {
   final double lat;
   final double lng;
 
-  String get initials =>
-      name.split(' ').where((p) => p.isNotEmpty).take(2).map((p) => p[0]).join();
+  String get initials => name.split(' ').where((p) => p.isNotEmpty).take(2).map((p) => p[0]).join();
 }
 
 class Client {
@@ -272,8 +256,7 @@ class WorkOrder {
   Duration get totalElapsed =>
       elapsed + (runningSince == null ? Duration.zero : DateTime.now().difference(runningSince!));
 
-  int get suppliesTotal =>
-      supplies.fold(0, (sum, s) => sum + (s.supply.price * s.qty).round());
+  int get suppliesTotal => supplies.fold(0, (sum, s) => sum + (s.supply.price * s.qty).round());
 
   int get checklistDone => checklist.where((c) => c.done).length;
   int get equipmentsReviewed => equipments.where((e) => e.reviewed).length;
