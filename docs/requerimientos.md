@@ -22,7 +22,7 @@
 | RF-01 | _pendiente_ | | |
 
 ## 5. Requerimientos no funcionales
-- Plataformas (iOS / Android / Web): _pendiente_
+- Plataformas: **Android e iOS** (app móvil multiplataforma)
 - Rendimiento: _pendiente_
 - Seguridad y autenticación: _pendiente_
 - Disponibilidad / modo offline: _pendiente_
@@ -39,12 +39,12 @@
 - Entidades de datos principales: _pendiente_
 
 ## 9. Propuesta tecnológica
-- Frontend: _pendiente_
+- App: **Flutter** (Dart), un solo código base para Android e iOS
 - Backend: _pendiente_
 - Infraestructura: _pendiente_
 
 ## 10. Preguntas abiertas
-1. ¿Qué es exactamente Prisma App Service (app móvil, web app, backend/API)?
+1. ¿Qué servicio ofrece Prisma App Service y a quién?
 2. ¿Quiénes son los usuarios y qué problema se les resuelve?
-3. ¿Hay tecnología preferida o restricciones (presupuesto, plazos, hosting)?
+3. ¿Hay restricciones de backend, presupuesto, plazos o hosting?
 4. ¿Existen diseños, marca o referencias visuales?
