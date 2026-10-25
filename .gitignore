@@ -11,3 +11,10 @@ ios/Pods/
 ios/.symlinks/
 android/.gradle/
 android/local.properties
+.flutter-plugins-dependencies
+**/Flutter/ephemeral/
+**/Flutter/Generated.xcconfig
+**/Flutter/flutter_export_environment.sh
+android/app/debug
+android/app/profile
+android/app/release
