@@ -1,0 +1,35 @@
+{
+    "name": "Prisma App Service",
+    "short_name": "Prisma Service",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#F4F5FA",
+    "theme_color": "#3730A3",
+    "description": "App para técnicos de campo de Prisma ERP",
+    "orientation": "portrait-primary",
+    "prefer_related_applications": false,
+    "icons": [
+        {
+            "src": "icons/Icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-maskable-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
+        },
+        {
+            "src": "icons/Icon-maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
+}
