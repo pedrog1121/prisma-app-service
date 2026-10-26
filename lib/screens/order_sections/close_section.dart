@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../../data/app_store.dart';
@@ -5,7 +6,9 @@ import '../../data/models.dart';
 import '../../design/components.dart';
 import '../../design/format.dart';
 import '../../design/tokens.dart';
+import '../../design/adaptive.dart';
 import '../../widgets/signature_pad.dart';
+import '../signature_screen.dart';
 
 /// Requisitos para poder cerrar la orden, con su estado.
 List<(String, bool)> closeRequirements(WorkOrder o) => [
@@ -39,14 +42,12 @@ class CloseSection extends StatefulWidget {
 
 class _CloseSectionState extends State<CloseSection> {
   late final _diagnosis = TextEditingController(text: widget.order.diagnosis);
-  late final _signer = TextEditingController(text: widget.order.signerName);
 
   WorkOrder get o => widget.order;
 
   @override
   void dispose() {
     _diagnosis.dispose();
-    _signer.dispose();
     super.dispose();
   }
 
@@ -135,44 +136,99 @@ class _CloseSectionState extends State<CloseSection> {
           },
           decoration: const InputDecoration(hintText: 'Diagnóstico y tareas realizadas'),
         ),
-        SectionLabel(
-          'Conformidad del cliente',
-          trailing: o.signature.isNotEmpty && !o.isClosed
-              ? GestureDetector(
-                  onTap: () {
-                    o.signature.clear();
-                    _changed();
-                  },
-                  child: Text('Borrar firma', style: context.tt.labelMedium?.copyWith(color: c.primary)),
-                )
-              : null,
-        ),
-        TextField(
-          controller: _signer,
-          enabled: !o.isClosed,
-          textCapitalization: TextCapitalization.words,
-          onChanged: (v) {
-            o.signerName = v;
-            _changed();
-          },
-          decoration: InputDecoration(
-            labelText: 'Nombre y aclaración',
-            hintText: o.client.contact,
-            prefixIcon: const Icon(Icons.person_outline_rounded),
-          ),
-        ),
-        const SizedBox(height: Space.md),
-        if (o.isClosed && o.signature.isEmpty)
-          Container(
-            height: 96,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(color: c.fieldReadonly, borderRadius: BorderRadius.circular(Radii.lg)),
-            child: Text('Firmado por ${o.signerName}',
-                style: context.tt.bodyLarge?.copyWith(fontStyle: FontStyle.italic, color: c.muted)),
-          )
-        else
-          SignaturePad(strokes: o.signature, enabled: !o.isClosed, onChanged: _changed),
+        const SectionLabel('Conformidad del cliente'),
+        _SignatureCard(order: o, onChanged: _changed),
       ],
+    );
+  }
+}
+
+/// Firma del cliente: botón para abrir la pantalla de firma o la firma ya tomada.
+class _SignatureCard extends StatelessWidget {
+  const _SignatureCard({required this.order, required this.onChanged});
+
+  final WorkOrder order;
+  final VoidCallback onChanged;
+
+  Future<void> _sign(BuildContext context) async {
+    final signed = await Navigator.of(context).push<bool>(
+      isCupertino(context)
+          ? CupertinoPageRoute(fullscreenDialog: true, builder: (_) => SignatureScreen(order: order))
+          : MaterialPageRoute(fullscreenDialog: true, builder: (_) => SignatureScreen(order: order)),
+    );
+    if (signed == true) onChanged();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.pc;
+    final o = order;
+    final hasSignature = o.signature.isNotEmpty;
+
+    if (!hasSignature) {
+      if (o.isClosed) {
+        return PrismaCard(
+          child: Text('Firmado por ${o.signerName}',
+              style: context.tt.bodyLarge?.copyWith(fontStyle: FontStyle.italic, color: c.muted)),
+        );
+      }
+      return PrismaCard(
+        padding: const EdgeInsets.all(Space.xl),
+        child: Column(
+          children: [
+            IconBadge(icon: Icons.draw_outlined, color: c.onSelection, background: c.selection, size: 52),
+            const SizedBox(height: Space.md),
+            Text('Falta la firma del cliente', style: context.tt.titleSmall),
+            const SizedBox(height: 2),
+            Text('Pásale el teléfono a ${o.client.contact} para que firme la conformidad.',
+                textAlign: TextAlign.center, style: context.tt.bodySmall),
+            const SizedBox(height: Space.lg),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(backgroundColor: c.selection, foregroundColor: c.onSelection),
+                onPressed: () => _sign(context),
+                icon: const Icon(Icons.draw_rounded, size: 20),
+                label: const Text('Firmar'),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return PrismaCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            height: 120,
+            color: c.fieldReadonly,
+            padding: const EdgeInsets.all(Space.md),
+            child: SignaturePreview(strokes: o.signature, canvasSize: o.signatureSize),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Space.lg, Space.md, Space.sm, Space.md),
+            child: Row(
+              children: [
+                Icon(Icons.verified_rounded, size: 20, color: c.successText),
+                const SizedBox(width: Space.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(o.signerName, style: context.tt.titleSmall),
+                      if (o.signedAt != null) Text('Firmó a las ${Fmt.time(o.signedAt!)}', style: context.tt.bodySmall),
+                    ],
+                  ),
+                ),
+                if (!o.isClosed) TextButton(onPressed: () => _sign(context), child: const Text('Volver a firmar')),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

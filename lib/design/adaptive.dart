@@ -22,12 +22,10 @@ Future<T?> showPrismaSheet<T>(
   required WidgetBuilder builder,
   bool tall = false,
 }) {
-  final c = context.pc;
   return showModalBottomSheet<T>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    backgroundColor: c.elevated,
     barrierColor: Colors.black.withValues(alpha: 0.35),
     constraints: tall ? BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.88) : null,
     builder: builder,

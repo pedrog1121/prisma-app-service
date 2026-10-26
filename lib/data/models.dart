@@ -247,6 +247,10 @@ class WorkOrder {
   String diagnosis = '';
   String signerName = '';
   List<List<Offset>> signature = [];
+
+  /// Tamaño del área donde se firmó, para escalar la firma al mostrarla.
+  Size signatureSize = Size.zero;
+  DateTime? signedAt;
   DateTime? closedAt;
 
   bool get hasContract => contract != null;

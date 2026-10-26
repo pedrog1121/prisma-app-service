@@ -17,6 +17,7 @@ Future<void> main() async {
   if (kIsWeb && Uri.base.queryParameters.containsKey('semantics')) {
     SemanticsBinding.instance.ensureSemantics();
   }
+  await AppStore.instance.loadPreferences();
   runApp(const PrismaApp());
 }
 
@@ -25,12 +26,19 @@ class PrismaApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: AppStore.instance,
+      builder: (context, _) => _app(),
+    );
+  }
+
+  Widget _app() {
     return MaterialApp(
       title: 'Prisma Service',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(Brightness.light),
       darkTheme: buildTheme(Brightness.dark),
-      themeMode: ThemeMode.system,
+      themeMode: AppStore.instance.themeMode,
       themeAnimationDuration: const Duration(milliseconds: 300),
       locale: const Locale('es'),
       supportedLocales: const [Locale('es')],

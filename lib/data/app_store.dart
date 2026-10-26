@@ -1,4 +1,5 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'mock_data.dart';
 import 'models.dart';
@@ -13,6 +14,29 @@ class AppStore extends ChangeNotifier {
   final Technician technician = MockData.technician;
   final List<WorkOrder> orders = MockData.buildOrders();
   bool loggedIn = false;
+
+  /// Apariencia elegida en Perfil. Se guarda en el teléfono.
+  ThemeMode themeMode = ThemeMode.system;
+  static const _themeKey = 'prisma.themeMode';
+
+  Future<void> loadPreferences() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString(_themeKey);
+      themeMode = ThemeMode.values.firstWhere((m) => m.name == saved, orElse: () => ThemeMode.system);
+    } catch (_) {
+      // Sin almacenamiento (por ejemplo, navegación privada): se usa el tema del sistema.
+    }
+  }
+
+  Future<void> setThemeMode(ThemeMode mode) async {
+    themeMode = mode;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_themeKey, mode.name);
+    } catch (_) {}
+  }
 
   void login() {
     loggedIn = true;
